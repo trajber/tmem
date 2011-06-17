@@ -1,0 +1,1278 @@
+diff --git a/src/rstm_r5/bench/Benchmark.cpp b/src/rstm_r5/bench/Benchmark.cpp
+index b712f1b..924f75c 100644
+--- a/src/rstm_r5/bench/Benchmark.cpp
++++ b/src/rstm_r5/bench/Benchmark.cpp
+@@ -58,6 +58,7 @@
+ #include "Benchmark.hpp"
+ 
+ using std::cout;
++using std::cerr;
+ using std::endl;
+ 
+ /**
+@@ -155,14 +156,14 @@ static void* run_benchmark(void* arg)
+             int val = rand_r(&seed);
+             int action = rand_r(&seed)%100;
+             if (id == 0 && BMCONFIG.inev) {
+-                BEGIN_TRANSACTION;
++	            BEGIN_TRANSACTION(9);
+                 stm::try_inevitable();
+                 b->random_transaction(args, &seed, val, action);
+                 END_TRANSACTION;
+             }
+ #if defined(STM_LIB_FAIR)
+             else if (BMCONFIG.priority) {
+-                BEGIN_TRANSACTION;
++	            BEGIN_TRANSACTION(10);
+                 stm::setPrio(id);
+                 b->random_transaction(args, &seed, val, action);
+                 END_TRANSACTION;
+@@ -188,14 +189,14 @@ static void* run_benchmark(void* arg)
+             int action = rand_r(&seed)%100;
+             // use inevitability if -I is on
+             if (id == 0 && BMCONFIG.inev) {
+-                BEGIN_TRANSACTION;
++	            BEGIN_TRANSACTION(11);
+                 stm::try_inevitable();
+                 b->random_transaction(args, &seed, val, action);
+                 END_TRANSACTION;
+             }
+ #if defined(STM_LIB_FAIR)
+             else if (BMCONFIG.priority) {
+-                BEGIN_TRANSACTION;
++	            BEGIN_TRANSACTION(12);
+                 stm::setPrio(id);
+                 b->random_transaction(args, &seed, val, action);
+                 END_TRANSACTION;
+@@ -245,6 +246,8 @@ static void* run_benchmark(void* arg)
+ 
+ void Benchmark::measure_speed()
+ {
++		cout << getpid() << endl;
++		//sleep(20);
+     std::vector<thread_args_t> args;
+     args.resize(BMCONFIG.threads);
+ 
+@@ -316,6 +319,9 @@ void Benchmark::measure_speed()
+     cout << "Transactions: " << Total_count
+          << ",  time: " << endtime - starttime << endl;
+ 
++    cout << "PID:" << getpid() << endl;
++    
++
+     // prettier output:  total tx/time
+     if (BMCONFIG.verbosity > 0) {
+ #if _MSC_VER
+@@ -344,6 +350,8 @@ void Benchmark::measure_speed()
+         }
+     }
+ 
++    cerr << Total_count << " " << (endtime - starttime) << endl;
++
+     if (BMCONFIG.verbosity > 2) {
+         // csv output
+         cout << "csv"
+@@ -372,6 +380,7 @@ void Benchmark::measure_speed()
+ #endif
+              << endl;
+     }
++    //   sleep(100);
+ }
+ 
+ // make sure all the parameters make sense
+diff --git a/src/rstm_r5/bench/Counter.hpp b/src/rstm_r5/bench/Counter.hpp
+index 9691a50..84e3e28 100644
+--- a/src/rstm_r5/bench/Counter.hpp
++++ b/src/rstm_r5/bench/Counter.hpp
+@@ -38,15 +38,20 @@
+ #include <stm/stm.hpp>
+ #include "Benchmark.hpp"
+ #include <iostream>
++#include <vector>
++#include <string>
++#include <list>
+ 
+ // the type being counted
+ #define MYTYPE int
++#define GAMBITYPE std::list<std::string>
+ 
+ namespace bench
+ {
+     class Counter : public stm::Object
+     {
+         GENERATE_FIELD(MYTYPE, value);
++	    //        GENERATE_FIELD(GAMBITYPE, meuvetor);
+ 
+       public:
+         Counter(MYTYPE startingValue = 0) : m_value(startingValue) { }
+@@ -69,8 +74,13 @@ namespace bench
+         void random_transaction(thread_args_t* args, unsigned int* seed,
+                                 unsigned int val,    int chance)
+         {
+-            BEGIN_TRANSACTION;
++	        BEGIN_TRANSACTION(29);
+             stm::wr_ptr<Counter> wr(m_counter);
++            
++            //     for (unsigned int i = 0; i < 1000000; i++) {
++            //  wr->get_meuvetor(wr).push_back("teste");
++            // }
++            //            stm::retry();
+             wr->set_value(wr->get_value(wr) + 1, wr);
+             END_TRANSACTION;
+         }
+@@ -80,11 +90,12 @@ namespace bench
+         {
+             // not as useful as it could be...
+             MYTYPE val = 0;
+-            BEGIN_TRANSACTION;
++            BEGIN_TRANSACTION(30);
+             stm::rd_ptr<Counter> rd(m_counter);
+             val = rd->get_value(rd);
+             END_TRANSACTION;
+             std::cout << "final value = " << val << std::endl;
++            //            sleep(10);
+             return (val > 0);
+         }
+ 
+diff --git a/src/rstm_r5/bench/DList.cpp b/src/rstm_r5/bench/DList.cpp
+index a3f6899..f4ab862 100644
+--- a/src/rstm_r5/bench/DList.cpp
++++ b/src/rstm_r5/bench/DList.cpp
+@@ -54,7 +54,7 @@ bool DList::isSane(void) const
+ {
+     bool sane = false;
+ 
+-    BEGIN_TRANSACTION {
++    BEGIN_TRANSACTION(46) {
+         sane = true;
+ 
+         // forward traversal
+@@ -106,7 +106,7 @@ bool DList::isSane(void) const
+ // sorted order; if val is already in the list, exit without inserting
+ void DList::insert(int val)
+ {
+-    BEGIN_TRANSACTION {
++	BEGIN_TRANSACTION(47) {
+         // traverse the list to find the insertion point
+         rd_ptr<DNode> prev(head);
+         rd_ptr<DNode> curr(prev->get_next(prev));
+@@ -136,7 +136,7 @@ bool DList::lookup(int val) const
+ {
+     bool found = false;
+ 
+-    BEGIN_TRANSACTION {
++    BEGIN_TRANSACTION(40) {
+         rd_ptr<DNode> curr(head);
+         curr = curr->get_next(curr);
+         while (curr != NULL) {
+@@ -153,7 +153,7 @@ bool DList::lookup(int val) const
+ // remove a node if its value == val
+ void DList::remove(int val)
+ {
+-    BEGIN_TRANSACTION {
++	BEGIN_TRANSACTION(48) {
+         // find the node whose val matches the request
+         rd_ptr<DNode> prev(head);
+         rd_ptr<DNode> curr(prev->get_next(prev));
+@@ -185,7 +185,7 @@ void DList::remove(int val)
+ // print the list
+ void DList::print() const
+ {
+-    BEGIN_TRANSACTION {
++	BEGIN_TRANSACTION(49) {
+         rd_ptr<DNode> curr(head);
+         //curr = curr->get_next(curr);
+ 
+@@ -202,7 +202,7 @@ void DList::print() const
+ 
+ void DList::increment_forward()
+ {
+-    BEGIN_TRANSACTION {
++	BEGIN_TRANSACTION(50) {
+         // forward traversal
+         rd_ptr<DNode> prev(head);
+         wr_ptr<DNode> curr(prev->get_next(prev));
+@@ -216,7 +216,7 @@ void DList::increment_forward()
+ 
+ void DList::increment_backward()
+ {
+-    BEGIN_TRANSACTION {
++	BEGIN_TRANSACTION(51) {
+         // backward traversal
+         rd_ptr<DNode> prev(tail);
+         wr_ptr<DNode> curr(prev->get_prev(prev));
+@@ -231,7 +231,7 @@ void DList::increment_backward()
+ // increment every seqth element, starting with start, moving forward
+ void DList::increment_forward_pattern(int start, int seq)
+ {
+-    BEGIN_TRANSACTION {
++	BEGIN_TRANSACTION(52) {
+         int sum = 0;
+         // forward traversal to element # start
+         rd_ptr<DNode> prev(head);
+@@ -260,7 +260,7 @@ void DList::increment_forward_pattern(int start, int seq)
+ // increment every element, starting with start, moving backward
+ void DList::increment_backward_pattern(int start, int seq)
+ {
+-    BEGIN_TRANSACTION {
++	BEGIN_TRANSACTION(53) {
+         int sum = 0;
+         // backward traversal to element # start
+         rd_ptr<DNode> prev(tail);
+@@ -291,7 +291,7 @@ void DList::increment_chunk(int chunk_num, int chunk_size)
+ {
+     int startpoint = chunk_num * chunk_size;
+ 
+-    BEGIN_TRANSACTION {
++    BEGIN_TRANSACTION(54) {
+         int sum = 0;
+         sh_ptr<DNode> chunk_start(NULL);
+         int ctr = 0;
+diff --git a/src/rstm_r5/bench/Forest.hpp b/src/rstm_r5/bench/Forest.hpp
+index d9e8665..0ef55bb 100644
+--- a/src/rstm_r5/bench/Forest.hpp
++++ b/src/rstm_r5/bench/Forest.hpp
+@@ -142,7 +142,7 @@ namespace bench
+               actions[i] = rand_r(seed) % 100;
+           }
+ 
+-          BEGIN_TRANSACTION {
++          BEGIN_TRANSACTION(100) {
+               // subsumption nesting with conditional to break out of livelock
+               // situations when the timer goes off
+               if (!bench::early_tx_terminate) {
+diff --git a/src/rstm_r5/bench/LFUCache.cpp b/src/rstm_r5/bench/LFUCache.cpp
+index f84b86a..bbdca8d 100644
+--- a/src/rstm_r5/bench/LFUCache.cpp
++++ b/src/rstm_r5/bench/LFUCache.cpp
+@@ -159,7 +159,7 @@ namespace bench
+         // hit a page, maybe change the heap
+         void pageHit(int v)
+         {
+-            BEGIN_TRANSACTION;
++	        BEGIN_TRANSACTION(13);
+             if (!bench::early_tx_terminate) {
+ 
+             wr_ptr<TableEntry> elt(table[v]);
+@@ -275,7 +275,7 @@ namespace bench
+         {
+             bool sane = false;
+ 
+-            BEGIN_TRANSACTION;
++            BEGIN_TRANSACTION(14);
+ 
+             sane = true;
+ 
+diff --git a/src/rstm_r5/bench/LinkedList.cpp b/src/rstm_r5/bench/LinkedList.cpp
+index 226fb90..34ee4d8 100644
+--- a/src/rstm_r5/bench/LinkedList.cpp
++++ b/src/rstm_r5/bench/LinkedList.cpp
+@@ -33,8 +33,8 @@
+ // POSSIBILITY OF SUCH DAMAGE.
+ 
+ #include <iostream>
+-
+ #include "LinkedList.hpp"
++#include <sys/types.h>
+ 
+ using namespace stm;
+ using namespace bench;
+@@ -45,194 +45,194 @@ LinkedList::LinkedList() : sentinel(new LLNode()) { }
+ // simple sanity check:  make sure all elements of the list are in sorted order
+ bool LinkedList::isSane(void) const
+ {
+-    bool sane = false;
+-    BEGIN_TRANSACTION {
+-        sane = true;
+-        rd_ptr<LLNode> prev(sentinel);
+-        rd_ptr<LLNode> curr(prev->get_next(prev));
+-
+-        while (curr != NULL) {
+-            if (prev->get_val(prev) >= curr->get_val(curr)) {
+-                sane = false;
+-                break;
+-            }
+-            prev = curr;
+-            curr = curr->get_next(curr);
+-        }
+-    } END_TRANSACTION;
+-    return sane;
++	bool sane = false;
++	BEGIN_TRANSACTION(1) {
++		sane = true;
++		rd_ptr<LLNode> prev(sentinel);
++		rd_ptr<LLNode> curr(prev->get_next(prev));
++
++		while (curr != NULL) {
++			if (prev->get_val(prev) >= curr->get_val(curr)) {
++				sane = false;
++				break;
++			}
++			prev = curr;
++			curr = curr->get_next(curr);
++		}
++	} END_TRANSACTION;
++	return sane;
+ }
+ 
+ // extended sanity check, does the same as the above method, but also calls v()
+ // on every item in the list
+ bool LinkedList::extendedSanityCheck(verifier v, unsigned long v_param) const
+ {
+-    bool sane = false;
+-    BEGIN_TRANSACTION {
+-        sane = true;
+-        rd_ptr<LLNode> prev(sentinel);
+-        rd_ptr<LLNode> curr(prev->get_next(prev));
+-        while (curr != NULL) {
+-            if (!v(curr->get_val(curr), v_param) ||
+-                (prev->get_val(prev) >= curr->get_val(curr)))
+-            {
+-                sane = false;
+-                break;
+-            }
+-            prev = curr;
+-            curr = prev->get_next(prev);
+-        }
+-    } END_TRANSACTION;
+-    return sane;
++	bool sane = false;
++	BEGIN_TRANSACTION(2) {
++		sane = true;
++		rd_ptr<LLNode> prev(sentinel);
++		rd_ptr<LLNode> curr(prev->get_next(prev));
++		while (curr != NULL) {
++			if (!v(curr->get_val(curr), v_param) ||
++			    (prev->get_val(prev) >= curr->get_val(curr)))
++				{
++					sane = false;
++					break;
++				}
++			prev = curr;
++			curr = prev->get_next(prev);
++		}
++	} END_TRANSACTION;
++	return sane;
+ }
+ 
+ // insert method; find the right place in the list, add val so that it is in
+ // sorted order; if val is already in the list, exit without inserting
+ void LinkedList::insert(int val)
+ {
+-    BEGIN_TRANSACTION {
+-        if (!bench::early_tx_terminate) {
+-        // traverse the list to find the insertion point
+-        rd_ptr<LLNode> prev(sentinel);
+-        rd_ptr<LLNode> curr(prev->get_next(prev));
+-
+-        while (curr != NULL) {
+-            if (curr->get_val(curr) >= val)
+-                break;
+-            prev = curr;
+-            curr = prev->get_next(prev);
+-        }
+-
+-        // now insert new_node between prev and curr
+-        if (!curr || (curr->get_val(curr) > val)) {
+-            wr_ptr<LLNode> insert_point(prev);
+-            insert_point->set_next(sh_ptr<LLNode>(new LLNode(val, curr)),
+-                                   insert_point);
+-        }
+-        }
+-    } END_TRANSACTION;
++	BEGIN_TRANSACTION(3) {
++		if (!bench::early_tx_terminate) {
++			// traverse the list to find the insertion point
++			rd_ptr<LLNode> prev(sentinel);
++			rd_ptr<LLNode> curr(prev->get_next(prev));
++
++			while (curr != NULL) {
++				if (curr->get_val(curr) >= val)
++					break;
++				prev = curr;
++				curr = prev->get_next(prev);
++			}
++
++			// now insert new_node between prev and curr
++			if (!curr || (curr->get_val(curr) > val)) {
++				wr_ptr<LLNode> insert_point(prev);
++				insert_point->set_next(sh_ptr<LLNode>(new LLNode(val, curr)),
++				                       insert_point);
++			}
++		}
++	} END_TRANSACTION;
+ }
+ 
+ 
+ // search function
+ bool LinkedList::lookup(int val) const
+ {
+-    bool found = false;
++	bool found = false;
+ 
+-    BEGIN_READONLY_TRANSACTION {
+-        if (!bench::early_tx_terminate) {
+-        rd_ptr<LLNode> curr(sentinel);
+-        curr = curr->get_next(curr);
++	BEGIN_READONLY_TRANSACTION(20) {
++		if (!bench::early_tx_terminate) {
++			rd_ptr<LLNode> curr(sentinel);
++			curr = curr->get_next(curr);
+ 
+-        while (curr != NULL) {
+-            if (curr->get_val(curr) >= val)
+-                break;
+-            curr = curr->get_next(curr);
+-        }
++			while (curr != NULL) {
++				if (curr->get_val(curr) >= val)
++					break;
++				curr = curr->get_next(curr);
++			}
+ 
+-        found = ((curr != NULL) && (curr->get_val(curr) == val));
+-        }
+-    } END_TRANSACTION;
++			found = ((curr != NULL) && (curr->get_val(curr) == val));
++		}
++	} END_TRANSACTION;
+ 
+-    return found;
++	return found;
+ }
+ 
+ // findmax function
+ int LinkedList::findmax() const
+ {
+-    int max = -1;
+-    BEGIN_TRANSACTION {
+-        rd_ptr<LLNode> curr(sentinel);
+-        while (curr != NULL) {
+-            max = curr->get_val(curr);
+-            curr = curr->get_next(curr);
+-        }
+-    } END_TRANSACTION;
+-    return max;
++	int max = -1;
++	BEGIN_TRANSACTION(4) {
++		rd_ptr<LLNode> curr(sentinel);
++		while (curr != NULL) {
++			max = curr->get_val(curr);
++			curr = curr->get_next(curr);
++		}
++	} END_TRANSACTION;
++	return max;
+ }
+ 
+ // findmin function
+ int LinkedList::findmin() const
+ {
+-    int min = -1;
+-    BEGIN_TRANSACTION {
+-        rd_ptr<LLNode> curr(sentinel);
+-        curr = curr->get_next(curr);
+-        if (curr != NULL)
+-            min = curr->get_val(curr);
+-    } END_TRANSACTION;
+-    return min;
++	int min = -1;
++	BEGIN_TRANSACTION(5) {
++		rd_ptr<LLNode> curr(sentinel);
++		curr = curr->get_next(curr);
++		if (curr != NULL)
++			min = curr->get_val(curr);
++	} END_TRANSACTION;
++	return min;
+ }
+ 
+ // write to the head of the list
+ void LinkedList::touch_head()
+ {
+-    BEGIN_TRANSACTION {
+-        wr_ptr<LLNode> curr(sentinel);
+-        curr->set_next(curr->get_next(curr), curr);
+-    } END_TRANSACTION;
++	BEGIN_TRANSACTION(6) {
++		wr_ptr<LLNode> curr(sentinel);
++		curr->set_next(curr->get_next(curr), curr);
++	} END_TRANSACTION;
+ }
+ 
+ // remove a node if its value == val
+ void LinkedList::remove(int val)
+ {
+-    BEGIN_TRANSACTION {
+-        if (!bench::early_tx_terminate) {
+-        // find the node whose val matches the request
+-        rd_ptr<LLNode> prev(sentinel);
+-        rd_ptr<LLNode> curr(prev->get_next(prev));
+-        while (curr != NULL) {
+-            // if we find the node, disconnect it and end the search
+-            if (curr->get_val(curr) == val) {
+-                wr_ptr<LLNode> mod_point(prev);
+-                mod_point->set_next(curr->get_next(curr), mod_point);
+-
+-                // delete curr...
+-                tx_delete(curr);
+-                break;
+-            }
+-            else if (curr->get_val(curr) > val) {
+-                // this means the search failed
+-                break;
+-            }
+-            prev = curr;
+-            curr = prev->get_next(prev);
+-        }
+-        }
+-    } END_TRANSACTION;
++	BEGIN_TRANSACTION(7) {
++		if (!bench::early_tx_terminate) {
++			// find the node whose val matches the request
++			rd_ptr<LLNode> prev(sentinel);
++			rd_ptr<LLNode> curr(prev->get_next(prev));
++			while (curr != NULL) {
++				// if we find the node, disconnect it and end the search
++				if (curr->get_val(curr) == val) {
++					wr_ptr<LLNode> mod_point(prev);
++					mod_point->set_next(curr->get_next(curr), mod_point);
++
++					// delete curr...
++					tx_delete(curr);
++					break;
++				}
++				else if (curr->get_val(curr) > val) {
++					// this means the search failed
++					break;
++				}
++				prev = curr;
++				curr = prev->get_next(prev);
++			}
++		}
++	} END_TRANSACTION;
+ }
+ 
+ 
+ // print the list
+ void LinkedList::print() const
+ {
+-    BEGIN_TRANSACTION {
+-        rd_ptr<LLNode> curr(sentinel);
+-        curr = curr->get_next(curr);
+-        std::cout << "list :: ";
+-        while (curr != NULL) {
+-            std::cout << curr->get_val(curr) << "->";
+-            curr = curr->get_next(curr);
+-        }
+-        std::cout << "NULL" << std::endl;
+-    } END_TRANSACTION;
++	BEGIN_TRANSACTION(8) {
++		rd_ptr<LLNode> curr(sentinel);
++		curr = curr->get_next(curr);
++		std::cout << "list :: ";
++		while (curr != NULL) {
++			std::cout << curr->get_val(curr) << "->";
++			curr = curr->get_next(curr);
++		}
++		std::cout << "NULL" << std::endl;
++	} END_TRANSACTION;
+ }
+ 
+ // search function
+ void LinkedList::overwrite(int val)
+ {
+-    BEGIN_TRANSACTION {
+-        if (!bench::early_tx_terminate) {
+-            rd_ptr<LLNode> curr(sentinel);
+-            curr = curr->get_next(curr);
+-
+-            while (curr != NULL) {
+-                if (curr->get_val(curr) >= val)
+-                    break;
+-                wr_ptr<LLNode> wcurr(curr);
+-                wcurr->set_val(wcurr->get_val(wcurr), wcurr);
+-                curr = wcurr->get_next(wcurr);
+-            }
+-        }
+-    } END_TRANSACTION;
++	BEGIN_TRANSACTION(9) {
++		if (!bench::early_tx_terminate) {
++			rd_ptr<LLNode> curr(sentinel);
++			curr = curr->get_next(curr);
++
++			while (curr != NULL) {
++				if (curr->get_val(curr) >= val)
++					break;
++				wr_ptr<LLNode> wcurr(curr);
++				wcurr->set_val(wcurr->get_val(wcurr), wcurr);
++				curr = wcurr->get_next(wcurr);
++			}
++		}
++	} END_TRANSACTION;
+ }
+diff --git a/src/rstm_r5/bench/LinkedListRelease.cpp b/src/rstm_r5/bench/LinkedListRelease.cpp
+index 70bb51f..d7dbb08 100644
+--- a/src/rstm_r5/bench/LinkedListRelease.cpp
++++ b/src/rstm_r5/bench/LinkedListRelease.cpp
+@@ -48,7 +48,7 @@ bool LinkedListRelease::isSane(void) const
+ {
+     bool sane = false;
+ 
+-    BEGIN_TRANSACTION;
++    BEGIN_TRANSACTION(15);
+ 
+     sane = true;
+ 
+@@ -76,7 +76,7 @@ bool LinkedListRelease::isSane(void) const
+ // sorted order; if val is already in the list, exit without inserting
+ void LinkedListRelease::insert(int val)
+ {
+-    BEGIN_TRANSACTION;
++	BEGIN_TRANSACTION(16);
+     if (!bench::early_tx_terminate) {
+ 
+     // traverse the list to find the insert point; release nodes we don't need
+@@ -109,7 +109,7 @@ bool LinkedListRelease::lookup(int val) const
+ {
+     bool found = false;
+ 
+-    BEGIN_TRANSACTION;
++    BEGIN_TRANSACTION(17);
+     if (!bench::early_tx_terminate) {
+ 
+     rd_ptr<LLNode> prev(sentinel);
+@@ -136,7 +136,7 @@ bool LinkedListRelease::lookup(int val) const
+ // remove a node if its value == val
+ void LinkedListRelease::remove(int val)
+ {
+-    BEGIN_TRANSACTION;
++	BEGIN_TRANSACTION(18);
+     if (!bench::early_tx_terminate) {
+ 
+     // find the node whose val matches the request
+diff --git a/src/rstm_r5/bench/PrivList.hpp b/src/rstm_r5/bench/PrivList.hpp
+index 4b8b071..38bd5ba 100644
+--- a/src/rstm_r5/bench/PrivList.hpp
++++ b/src/rstm_r5/bench/PrivList.hpp
+@@ -99,7 +99,7 @@ bool bench::PrivList::sanity_check(void) const
+ {
+     bool sane = false;
+ 
+-    BEGIN_TRANSACTION;
++    BEGIN_TRANSACTION(71);
+ 
+     sane = true;
+     stm::rd_ptr<PrivNode> prev(sentinel);
+@@ -129,7 +129,7 @@ bool bench::PrivList::insertNextOrClearAll()
+     // if we privatize the list, it will go into here
+     stm::sh_ptr<PrivNode> priv(NULL);
+ 
+-    BEGIN_TRANSACTION;
++    BEGIN_TRANSACTION(72);
+ 
+     // reset locals
+     priv = stm::sh_ptr<PrivNode>(NULL);
+diff --git a/src/rstm_r5/bench/PrivTree.cpp b/src/rstm_r5/bench/PrivTree.cpp
+index d4d5950..c0a350c 100755
+--- a/src/rstm_r5/bench/PrivTree.cpp
++++ b/src/rstm_r5/bench/PrivTree.cpp
+@@ -48,7 +48,7 @@ bool PrivTree::lookup(int v) const
+ {
+     bool found = false;
+ 
+-    BEGIN_TRANSACTION {
++    BEGIN_TRANSACTION(61) {
+ 
+         found = false;
+         // find v
+@@ -79,7 +79,7 @@ void PrivTree::insert(int v)
+     sh_ptr<RBNode> leaked_tree;
+     bool leaked;
+ 
+-    BEGIN_TRANSACTION {
++    BEGIN_TRANSACTION(62) {
+         bool found = false;         // found means v is in the tree already
+         // find insertion point
+         rd_ptr<RBNode> curr(sentinel);
+@@ -220,7 +220,7 @@ void PrivTree::insert(int v)
+         // the transaction was an acquire
+         acquire_fence();
+         // now push the tree onto a stack for consumption by another thread
+-        BEGIN_TRANSACTION {
++        BEGIN_TRANSACTION(63) {
+             STACK->push_tx(leaked_tree);
+         } END_TRANSACTION;
+     }
+@@ -232,7 +232,7 @@ void PrivTree::consumer()
+     sh_ptr<RBNode> private_tree;
+     bool b = false;
+     while (true) {
+-        BEGIN_TRANSACTION {
++	    BEGIN_TRANSACTION(64) {
+             b = STACK->pop_tx(private_tree);
+         } END_TRANSACTION;
+         if (b || bench::early_tx_terminate) {
+@@ -288,7 +288,7 @@ void PrivTree::consumer()
+ // remove the node with v as its value if it exists in the tree
+ void PrivTree::remove(int v)
+ {
+-    BEGIN_TRANSACTION;
++	BEGIN_TRANSACTION(65);
+ 
+     // find v
+     rd_ptr<RBNode> sentinel_r(sentinel);
+@@ -573,7 +573,7 @@ bool PrivTree::sanity_check() const
+ {
+     bool sane = false;
+ 
+-    BEGIN_TRANSACTION;
++    BEGIN_TRANSACTION(66);
+ 
+     sane = false;
+     const rd_ptr<RBNode> sentinel_r(sentinel);
+@@ -621,7 +621,7 @@ void PrivTree::printNode(const sh_ptr<RBNode>& x, int indent)
+ // "transaction" that prints a tree; only run this in single-thread mode!
+ void PrivTree::print(int indent) const
+ {
+-    BEGIN_TRANSACTION;
++	BEGIN_TRANSACTION(67);
+ 
+     const rd_ptr<RBNode> sentinel_r(sentinel);
+     printNode(sentinel_r->get_child(0, sentinel_r));
+diff --git a/src/rstm_r5/bench/RBTree.cpp b/src/rstm_r5/bench/RBTree.cpp
+index 6882add..c3755d6 100755
+--- a/src/rstm_r5/bench/RBTree.cpp
++++ b/src/rstm_r5/bench/RBTree.cpp
+@@ -44,7 +44,7 @@ bool RBTree::lookup(int v) const
+ {
+     bool found = false;
+ 
+-    BEGIN_READONLY_TRANSACTION {
++    BEGIN_READONLY_TRANSACTION(20) {
+         if (!bench::early_tx_terminate) {
+ 
+             found = false;
+@@ -73,7 +73,7 @@ bool RBTree::lookup(int v) const
+ // insert a node with v as its value if no such node exists in the tree
+ void RBTree::insert(int v)
+ {
+-    BEGIN_TRANSACTION {
++	BEGIN_TRANSACTION(24) {
+         if (!bench::early_tx_terminate) {
+ 
+         bool found = false;         // found means v is in the tree already
+@@ -196,7 +196,7 @@ void RBTree::insert(int v)
+ // remove the node with v as its value if it exists in the tree
+ void RBTree::remove(int v)
+ {
+-    BEGIN_TRANSACTION;
++	BEGIN_TRANSACTION(25);
+     if (!bench::early_tx_terminate) {
+ 
+     // find v
+@@ -478,7 +478,7 @@ bool RBTree::isSane() const
+ {
+     bool sane = false;
+ 
+-    BEGIN_TRANSACTION;
++    BEGIN_TRANSACTION(26);
+ 
+     sane = false;
+     const rd_ptr<RBNode> sentinel_r(sentinel);
+@@ -526,7 +526,7 @@ void RBTree::printNode(const sh_ptr<RBNode>& x, int indent)
+ // "transaction" that prints a tree; only run this in single-thread mode!
+ void RBTree::print(int indent) const
+ {
+-    BEGIN_TRANSACTION;
++	BEGIN_TRANSACTION(27);
+ 
+     const rd_ptr<RBNode> sentinel_r(sentinel);
+     printNode(sentinel_r->get_child(0, sentinel_r));
+diff --git a/src/rstm_r5/bench/RBTreeLarge.cpp b/src/rstm_r5/bench/RBTreeLarge.cpp
+index c32718d..13db1b6 100755
+--- a/src/rstm_r5/bench/RBTreeLarge.cpp
++++ b/src/rstm_r5/bench/RBTreeLarge.cpp
+@@ -90,7 +90,7 @@ bool RBTreeLarge::lookup(int v) const
+ {
+     bool found = false;
+ 
+-    BEGIN_TRANSACTION;
++    BEGIN_TRANSACTION(31);
+ 
+     found = false;
+     // find v
+@@ -121,7 +121,7 @@ bool RBTreeLarge::lookup(int v) const
+ // insert a node with v as its value if no such node exists in the tree
+ void RBTreeLarge::insert(int v)
+ {
+-    BEGIN_TRANSACTION;
++	BEGIN_TRANSACTION(32);
+ 
+     sh_ptr<RBNodeLarge> cx;
+ 
+@@ -215,7 +215,7 @@ void RBTreeLarge::insert(int v)
+ // remove the node with v as its value if it exists in the tree
+ void RBTreeLarge::remove(int v)
+ {
+-    BEGIN_TRANSACTION;
++	BEGIN_TRANSACTION(33);
+ 
+     // find v
+     rd_ptr<RBNodeLarge> sentinel_r(sentinel);
+@@ -477,7 +477,7 @@ bool RBTreeLarge::isSane() const
+ {
+     bool sane = false;
+ 
+-    BEGIN_TRANSACTION;
++    BEGIN_TRANSACTION(34);
+ 
+     sane = false;
+     const rd_ptr<RBNodeLarge> sentinel_r(sentinel);
+@@ -527,7 +527,7 @@ static void printNode(const sh_ptr<RBNodeLarge>& x, int indent = 0)
+ // "transaction" that prints a tree; only run this in single-thread mode!
+ void RBTreeLarge::print(int indent) const
+ {
+-    BEGIN_TRANSACTION;
++	BEGIN_TRANSACTION(35);
+ 
+     const rd_ptr<RBNodeLarge> sentinel_r(sentinel);
+     printNode(sentinel_r->get_child(0, sentinel_r));
+diff --git a/src/rstm_r5/bench/RWPathology.hpp b/src/rstm_r5/bench/RWPathology.hpp
+index e3cf8cd..31a6652 100644
+--- a/src/rstm_r5/bench/RWPathology.hpp
++++ b/src/rstm_r5/bench/RWPathology.hpp
+@@ -77,7 +77,7 @@ namespace bench
+                                       unsigned int   val,
+                                       int            chance)
+       {
+-          BEGIN_TRANSACTION {
++	      BEGIN_TRANSACTION(94) {
+               // subsumption nesting with conditional to break out of livelock
+               // situations when the timer goes off
+               if (!bench::early_tx_terminate) {
+diff --git a/src/rstm_r5/bench/RandomGraphList.cpp b/src/rstm_r5/bench/RandomGraphList.cpp
+index a42cba0..0f5c3ba 100644
+--- a/src/rstm_r5/bench/RandomGraphList.cpp
++++ b/src/rstm_r5/bench/RandomGraphList.cpp
+@@ -73,7 +73,7 @@ void RandomGraphList::insert(int val, unsigned int* seed)
+             q++;
+     }
+ 
+-    BEGIN_TRANSACTION {
++    BEGIN_TRANSACTION(20) {
+         if (!bench::early_tx_terminate) {
+             // search for the node we want to insert
+             rd_ptr<VListNode> r_prev(nodes);
+@@ -164,7 +164,7 @@ void RandomGraphList::insert(int val, unsigned int* seed)
+ // print the RandomGraph structure
+ void RandomGraphList::print() const
+ {
+-    BEGIN_TRANSACTION {
++	BEGIN_TRANSACTION(21) {
+         cout << "graph:" << endl;
+         rd_ptr<VListNode> curr(nodes);
+         curr = curr->get_next(curr);
+@@ -189,7 +189,7 @@ void RandomGraphList::remove(int val)
+ {
+     // trim val down to the appropriate range
+     val %= maxNodes;
+-    BEGIN_TRANSACTION {
++    BEGIN_TRANSACTION(22) {
+         if (!bench::early_tx_terminate) {
+             // search for the node we want to remove
+             rd_ptr<VListNode> r_prev(nodes);
+diff --git a/src/rstm_r5/bench/StridePathology.hpp b/src/rstm_r5/bench/StridePathology.hpp
+index 599aed9..1308dc7 100644
+--- a/src/rstm_r5/bench/StridePathology.hpp
++++ b/src/rstm_r5/bench/StridePathology.hpp
+@@ -78,7 +78,7 @@ namespace bench
+                                       unsigned int   val,
+                                       int            action)
+       {
+-          BEGIN_TRANSACTION {
++	      BEGIN_TRANSACTION(95) {
+               // subsumption nesting with conditional to break out of livelock
+               // situations when the timer goes off
+               if (!bench::early_tx_terminate) {
+diff --git a/src/rstm_r5/bench/TypeTest.hpp b/src/rstm_r5/bench/TypeTest.hpp
+index 26e3676..6f02d73 100644
+--- a/src/rstm_r5/bench/TypeTest.hpp
++++ b/src/rstm_r5/bench/TypeTest.hpp
+@@ -113,7 +113,7 @@ namespace bench
+        */
+       void DataTypeTest()
+       {
+-          BEGIN_TRANSACTION {
++	      BEGIN_TRANSACTION(90) {
+               cout << "----------------------------" << endl;
+               // why bother with a read pointer when we always write?
+               stm::wr_ptr<TypeTestObject> wtto(tto);
+diff --git a/src/rstm_r5/bench/VerifyNesting.hpp b/src/rstm_r5/bench/VerifyNesting.hpp
+index bfe2125..68f2d68 100644
+--- a/src/rstm_r5/bench/VerifyNesting.hpp
++++ b/src/rstm_r5/bench/VerifyNesting.hpp
+@@ -77,7 +77,7 @@ namespace bench
+                                       unsigned int   val,
+                                       int            chance)
+       {
+-          BEGIN_TRANSACTION {
++	      BEGIN_TRANSACTION(91) {
+               if (subslist1.lookup(val)) {
+                   subslist1.remove(val);
+                   subslist2.insert(val);
+diff --git a/src/rstm_r5/bench/VerifyRetry.hpp b/src/rstm_r5/bench/VerifyRetry.hpp
+index 523f29c..4649815 100644
+--- a/src/rstm_r5/bench/VerifyRetry.hpp
++++ b/src/rstm_r5/bench/VerifyRetry.hpp
+@@ -67,7 +67,7 @@ namespace bench
+                                       unsigned int   val,
+                                       int            chance)
+       {
+-          BEGIN_TRANSACTION {
++	      BEGIN_TRANSACTION(92) {
+               // we don't want things to keep running once time is up!
+               if (!bench::early_tx_terminate) {
+                   if (args->id % 2 == 0)
+diff --git a/src/rstm_r5/bench/WWPathology.hpp b/src/rstm_r5/bench/WWPathology.hpp
+index b10742d..289009d 100644
+--- a/src/rstm_r5/bench/WWPathology.hpp
++++ b/src/rstm_r5/bench/WWPathology.hpp
+@@ -73,7 +73,7 @@ namespace bench
+                                       unsigned int   val,
+                                       int            chance)
+       {
+-          BEGIN_TRANSACTION {
++	      BEGIN_TRANSACTION(93) {
+               // subsumption nesting with conditional to break out of livelock
+               // situations when the timer goes off
+               if (!bench::early_tx_terminate) {
+diff --git a/src/rstm_r5/stm/Makefile b/src/rstm_r5/stm/Makefile
+index 39e1dce..b4199ee 100644
+--- a/src/rstm_r5/stm/Makefile
++++ b/src/rstm_r5/stm/Makefile
+@@ -78,7 +78,7 @@ realclean:
+ # since we hacked the paths from the dependency builder, we need an explicit
+ # compilation rule
+ $(LIB_OFILES) $(CM_OFILES) $(SUPT_OFILES):
+-	$(CXX) $< $(CXXFLAGS) -c -o $@
++	$(CXX) $< $(CXXFLAGS) -c -o $@ 
+ 
+ # there exist configurations for which CM_OFILES and SUPT_OFILES are not
+ # needed, but it's more hassle than it's worth to exclude them
+diff --git a/src/rstm_r5/stm/api/rstm_api.hpp b/src/rstm_r5/stm/api/rstm_api.hpp
+index 6761c90..541c1b2 100644
+--- a/src/rstm_r5/stm/api/rstm_api.hpp
++++ b/src/rstm_r5/stm/api/rstm_api.hpp
+@@ -93,13 +93,14 @@
+ //         properly without the loop protection, possibly due to aggressive
+ //         compiler optimization.
+ //-----------------------------------------------------------------------------
+-#define BEGIN_TRANSACTION                                               \
++#define BEGIN_TRANSACTION(tx_id)	  \
+     {                                                                   \
+         rstm::Descriptor& tx = *rstm::currentDescriptor;                \
++        tx.setTxId(tx_id); \
+         while (true) {                                                  \
+             jmp_buf _jmpbuf;                                            \
+             setjmp(_jmpbuf);                                            \
+-            tx.begin_transaction(&_jmpbuf);                             \
++            tx.begin_transaction(&_jmpbuf);	  \
+             {
+ 
+ #define BEGIN_READONLY_TRANSACTION BEGIN_TRANSACTION
+@@ -130,7 +131,7 @@
+ //   problems if thrown exceptions point to stack locations or transactionally
+ //   allocated data.
+ //-----------------------------------------------------------------------------
+-#define BEGIN_TRANSACTION                                       \
++#define BEGIN_TRANSACTION(tx_id)                                \
+     {                                                           \
+         rstm::Descriptor& tx = *rstm::currentDescriptor;        \
+         while (true) {                                          \
+diff --git a/src/rstm_r5/stm/api/wordbased_api.hpp b/src/rstm_r5/stm/api/wordbased_api.hpp
+index 84b71e7..05e5dfb 100644
+--- a/src/rstm_r5/stm/api/wordbased_api.hpp
++++ b/src/rstm_r5/stm/api/wordbased_api.hpp
+@@ -189,9 +189,10 @@ inline void restart() { Descriptor::Self->restart(); }
+ //         properly without the loop protection, possibly due to aggressive
+ //         compiler optimization.
+ //-----------------------------------------------------------------------------
+-#define BEGIN_TRANSACTION                           \
++#define BEGIN_TRANSACTION(tx_id)                    \
+   {                                                 \
+     stm::Descriptor& tx = *stm::Descriptor::Self;   \
++    tx.setTxId(tx_id);                              \
+     while (true) {                                  \
+       jmp_buf _jmpbuf;                              \
+       setjmp(_jmpbuf);                              \
+diff --git a/src/rstm_r5/stm/et.hpp b/src/rstm_r5/stm/et.hpp
+index 2c6cf7f..2dafef2 100644
+--- a/src/rstm_r5/stm/et.hpp
++++ b/src/rstm_r5/stm/et.hpp
+@@ -63,6 +63,8 @@
+ #include "support/WBMMPolicy.hpp"
+ #include "support/Inevitability.hpp"
+ #include "support/Privatization.hpp"
++#include "support/stm_event.h"
++
+ 
+ namespace stm {
+ 
+@@ -593,6 +595,10 @@ class ETThread : public OrecWBTxThread {
+ 
+   /*** increase the abort count and restart the transaction */
+   void abort() {
++#ifdef USE_TMEM
++    // notify OS about a new stm_event (abort)
++	  register_stm_abort(tx_id);
++#endif
+     restart_transaction(num_aborts, false, true);
+   }
+ 
+@@ -613,6 +619,10 @@ class ETThread : public OrecWBTxThread {
+   __attribute__((flatten))
+   void beginTransaction(jmp_buf* buf) {
+     assert(nesting_depth >= 0);
++#ifdef USE_TMEM
++    // notify OS about a new stm_event (begin)
++    register_stm_start(tx_id);
++#endif
+     if (nesting_depth++ != 0)
+       return;
+ 
+@@ -630,6 +640,8 @@ class ETThread : public OrecWBTxThread {
+     // order to safely call free()
+     // notify CM
+     cm.onBegin();
++
++
+   }
+ 
+   /*** commit a transaction */
+@@ -647,6 +659,10 @@ class ETThread : public OrecWBTxThread {
+     // NB: with GRL, we can ignore the timestamp
+     if (inev.isInevitable()) {
+       num_commits++;
++#ifdef USE_TMEM
++      // notify OS about a new stm_event (commit)
++      register_stm_commit(tx_id);
++#endif
+       tx_state = COMMITTED;
+       cm.onCommit();
+       cleanup_inevitable();
+@@ -656,6 +672,10 @@ class ETThread : public OrecWBTxThread {
+     // if I don't have writes, I'm committed
+     if ((redolog.size() == 0) && (undolog.size() == 0)) {
+       num_commits++;
++#ifdef USE_TMEM
++      // notify OS about a new stm_event (commit)
++      register_stm_commit(tx_id);
++#endif
+       tx_state = COMMITTED;
+       cm.onCommit();
+       allocator.onTxCommit();
+@@ -690,19 +710,33 @@ class ETThread : public OrecWBTxThread {
+ 
+     // remember that this was a commit
+     num_commits++;
++#ifdef USE_TMEM
++    // notify OS about a new stm_event (commit)
++    register_stm_commit(tx_id);
++#endif
+ 
+     // commit all frees, reset all lists
+     allocator.onTxCommit();
+     common_cleanup();
++
+   }
+ 
+   /*** increase the retry count, sleep, and restart the transaction */
+   void retry() {
++#ifdef USE_TMEM
++    // notify OS about a new stm_event (retry)
++    register_stm_retry(tx_id);
++#endif
+     restart_transaction(num_retrys, true, false);
+   }
+ 
+   /*** increase the restart count and restart the transaction */
+   void restart() {
++    // notify OS about a new stm_event (restart)
++#ifdef USE_TMEM
++	  // TODO aqui tem q ser restart
++    register_stm_abort(tx_id);
++#endif
+     restart_transaction(num_restarts, false, false);
+   }
+ 
+diff --git a/src/rstm_r5/stm/rstm.cpp b/src/rstm_r5/stm/rstm.cpp
+index 77eb3b6..910d4de 100755
+--- a/src/rstm_r5/stm/rstm.cpp
++++ b/src/rstm_r5/stm/rstm.cpp
+@@ -534,6 +534,7 @@ void rstm::retry() {
+   // we cannot be inevitable and call this!
+   assert(!currentDescriptor->inev.isInevitable());
+ 
++  register_stm_abort(currentDescriptor->getTxId());
+   currentDescriptor->retry();
+ }
+ 
+@@ -542,6 +543,8 @@ stm::RetryMechanism rstm::Descriptor::retryImpl;
+ #if defined(STM_RETRY_SLEEP)
+ /***  Implementation of retry that uses calls to usleep() */
+ void rstm::Descriptor::retry() {
++  register_stm_abort(currentDescriptor->getTxId());
++
+   // set state to aborted.  If this fails, we've been aborted, so we shouldn't
+   // sleep later
+   bool sleep_at_end = bool_cas(&tx_state, stm::ACTIVE, stm::ABORTED);
+@@ -583,6 +586,8 @@ void rstm::Descriptor::retry() {
+ #elif defined(STM_RETRY_BLOOM)
+ /*** Bloom-filter based retry */
+ void rstm::Descriptor::retry() {
++  register_stm_abort(currentDescriptor->getTxId());
++
+   // create the bloom filter
+   retryHandle->reset();
+   for (LazyWriteLog::iterator i = lazyWrites.begin(),
+@@ -666,6 +671,8 @@ void rstm::Descriptor::retry() {
+ #elif defined(STM_RETRY_VISREAD)
+ /*** retry via retry bits set in the object header of every object */
+ void rstm::Descriptor::retry() {
++  register_stm_abort(currentDescriptor->getTxId());
++
+   // must make this call early, because once we call insert() even once,
+   // someone could wake us
+   retryImpl.beginRetry(retryHandle);
+diff --git a/src/rstm_r5/stm/rstm.hpp b/src/rstm_r5/stm/rstm.hpp
+index 6554df6..e5c1086 100755
+--- a/src/rstm_r5/stm/rstm.hpp
++++ b/src/rstm_r5/stm/rstm.hpp
+@@ -59,6 +59,7 @@
+ #include "support/TokenManager.hpp"
+ #include "support/atomic_ops.h"
+ #include "support/Retry.hpp"
++#include "support/stm_event.h"
+ 
+ #if defined(STM_ROLLBACK_SETJMP)
+ #include <setjmp.h>
+@@ -299,6 +300,8 @@ class Descriptor {
+   }
+ 
+  private:
++	int _tx_id;
++
+   /*** are we using lazy or eager acquire? */
+   bool isLazy;
+ 
+@@ -317,11 +320,15 @@ class Descriptor {
+    *  Set all metadata up for a new transaction, and move to stm::ACTIVE
+    */
+ #if defined(STM_ROLLBACK_SETJMP)
+-  void begin_transaction(jmp_buf* buf)
++	void begin_transaction(jmp_buf* buf)
+ #else
+   void begin_transaction()
+ #endif
+   {
++#ifdef USE_TMEM
++  // notify OS about a new stm_event (abort)
++	  register_stm_start(_tx_id);
++#endif
+     // only for outermost transaction
+     if (nesting_depth == 0) {
+       inev.onBeginTx();
+@@ -480,6 +487,9 @@ class Descriptor {
+   unsigned getAborts()  { return num_aborts; }
+   unsigned getRetrys()  { return num_retrys; }
+ 
++	void setTxId(const int &tx_id) { _tx_id = tx_id; }
++	int getTxId() const { return _tx_id;}
++
+   /**
+    *  Ensure that Object t has a shared header guarding access to it
+    *
+@@ -742,6 +752,10 @@ inline Descriptor::~Descriptor() {
+ inline void Descriptor::rollback() {
+   // we'd better be aborted if we're here
+   assert(tx_state == stm::ABORTED);
++#ifdef USE_TMEM
++  // notify OS about a new stm_event (abort)
++  register_stm_abort(getTxId());
++#endif
+   num_aborts++;
+ 
+   // notify CM
+@@ -823,6 +837,9 @@ inline void Descriptor::commit() {
+   inev.onEndTx();
+ 
+   ++num_commits;
++#ifdef USE_TMEM
++  register_stm_commit(getTxId());
++#endif
+   --nesting_depth;
+ }
+ 
+diff --git a/src/rstm_r5/stm/support/stm_event.h b/src/rstm_r5/stm/support/stm_event.h
+new file mode 100644
+index 0000000..08fecec
+--- /dev/null
++++ b/src/rstm_r5/stm/support/stm_event.h
+@@ -0,0 +1,31 @@
++#ifndef STM_EVENT_H
++#define STM_EVENT_H
++
++#include <linux/unistd.h>
++#include <stdint.h>
++#include <sys/syscall.h> 
++#include <iostream>
++#include <fstream>
++
++using std::cout;
++using std::endl;
++
++#define __NR_stm_event 345
++
++inline long register_stm_event(int atomic_block_id, uint8_t event_type) {
++	return syscall(__NR_stm_event, atomic_block_id, event_type);
++}
++
++inline long register_stm_start(int atomic_block_id) {
++	return register_stm_event(atomic_block_id, 0);
++}
++
++inline long register_stm_commit(int atomic_block_id) {
++	return register_stm_event(atomic_block_id, 1);
++}
++
++inline long register_stm_abort(int atomic_block_id) {
++	return register_stm_event(atomic_block_id, 2);
++}
++
++#endif
+diff --git a/src/rstm_r5/stm/support/word_based_descriptor.hpp b/src/rstm_r5/stm/support/word_based_descriptor.hpp
+index ece8ac1..d30b228 100644
+--- a/src/rstm_r5/stm/support/word_based_descriptor.hpp
++++ b/src/rstm_r5/stm/support/word_based_descriptor.hpp
+@@ -53,9 +53,13 @@ namespace stm
+       typedef ValueHash RedoLog;
+ #endif
+ 
++
++  private:
+     protected: // fields
+ 
+       /*** transaction state can be ACTIVE, COMMITTED, or ABORTED */
++
++	  int tx_id;
+       volatile unsigned long tx_state;
+ 
+     protected: // methods
+@@ -77,6 +81,8 @@ namespace stm
+ 
+     public: // fields
+ 
++	  void setTxId(const int &_tx_id) { tx_id = _tx_id; }
++
+       /*** is the thread in a transactional context> */
+       bool isTransactional() { return tx_state != COMMITTED; }
+   }; // class WBTxThread
