@@ -1,0 +1,13 @@
+The use of parallel architectures, not only in scientific and corporate, but also in domestic
+systems, made the multithread programming more popular, forcing programmers to face the
+problems related to concurrency control. The transactional memory was proposed as a way for
+easing parallel program development, providing the programmer the possibility to only mark the
+sections of code that are to be executed in an atomic and isolated way. In this work, it’s proposed
+a Linux kernel modification that is able to monitor transactional memory events like started,
+aborted and commited transactions, making it possible to observe the behaviour of a program
+that uses transactional memory without the need to interrupt its execution and with low overhead
+in user time. The information produced by this monitoring system is published in a virtual
+file system to make them available for analysis and monitoring tools that do not have access
+permissions to access them directly, helping the developer to decide whether some transactional
+memory aproach is better than other or if the use of transactional memory is advantageous over
+the use of classical mechanisms of concurrency control.
